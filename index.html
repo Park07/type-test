@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>park07/type-test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d1117;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2rem;
+    user-select: none;
+    cursor: default;
+  }
+  #app { width: 100%; max-width: 680px; }
+  h1 { color: #e6e6e6; font-size: 20px; font-weight: 600; letter-spacing: -0.5px; text-align: center; margin-bottom: 4px; }
+  .sub { color: #7d8590; font-size: 12px; text-align: center; margin-bottom: 32px; }
+  #timer { text-align: center; margin-bottom: 16px; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; display: none; }
+  #words {
+    background: #161b22; border-radius: 8px; padding: 24px 28px;
+    font-size: 18px; line-height: 2.2; height: 140px; overflow: hidden;
+    border: 1px solid #30363d; margin-bottom: 16px; cursor: text;
+  }
+  .word { display: inline-block; margin-right: 10px; border-bottom: 2px solid transparent; padding-bottom: 2px; }
+  .word.active { border-bottom-color: #F9CB42; }
+  .char { position: relative; color: #484f58; }
+  .char.correct { color: #e6e6e6; }
+  .char.wrong { color: #E24B4A; }
+  .char.done-correct { color: #7EED56; }
+  .char.done-wrong { color: #E24B4A; }
+  .char.missed { color: #484f58; }
+  .cursor {
+    position: absolute; left: -1px; top: 2px; width: 2px; height: 1.1em;
+    background: #F9CB42; border-radius: 1px;
+    animation: blink 1s step-end infinite;
+  }
+  #hint { text-align: center; color: #7d8590; font-size: 13px; animation: pulse 2s ease-in-out infinite; }
+  #results {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 24px; text-align: center; margin-top: 8px; display: none;
+  }
+  .stats { display: flex; justify-content: center; gap: 32px; margin-bottom: 20px; }
+  .stat-num { font-size: 48px; font-weight: 700; }
+  .stat-label { color: #7d8590; font-size: 12px; }
+  #best { color: #7d8590; font-size: 12px; margin-bottom: 16px; }
+  .restart-hint { color: #484f58; font-size: 12px; margin-top: 8px; }
+  .key { color: #F9CB42; background: #1c1c2e; padding: 2px 8px; border-radius: 4px; border: 1px solid #30363d; }
+  #restart-btn {
+    display: block; margin: 24px auto 0; color: #484f58; font-size: 12px;
+    cursor: pointer; padding: 4px 12px; background: none; border: none;
+    font-family: inherit; transition: color 0.2s;
+  }
+  #restart-btn:hover { color: #F9CB42; }
+  #input-trap { position: fixed; left: -9999px; opacity: 0; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes pulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>park07/type-test</h1>
+  <p class="sub">how fast can you type?</p>
+  <div id="timer"></div>
+  <div id="words"></div>
+  <input id="input-trap" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly>
+  <p id="hint">start typing...</p>
+  <div id="results">
+    <div class="stats">
+      <div><div class="stat-num" id="r-wpm" style="color:#7EED56"></div><div class="stat-label">wpm</div></div>
+      <div><div class="stat-num" id="r-acc" style="color:#3690EA"></div><div class="stat-label">accuracy</div></div>
+      <div><div class="stat-num" id="r-words" style="color:#F9CB42"></div><div class="stat-label">words</div></div>
+    </div>
+    <div id="best"></div>
+    <div class="restart-hint">press <span class="key">tab</span> to restart</div>
+  </div>
+  <button id="restart-btn">tab to restart</button>
+</div>
+
+<script>
+const WORDS = "the be to of and a in that have it for not on with he as you do at this but his by from they we her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us great between need under each much right move thing general heart hand high keep place where small found those never still world long last might say old run against through home end point city play away next change close night real life few left big read head light story always white start five open walk began grow took river car hard live while watch near must house turn both line name around stop face page letter game food build own state side help above every again tree below plant study earth eye late should learn book carry group thought sea talk until along child feet once paper east seem together may often quite almost young really family leave song best duck pixel code type fast quick speed race test word brain keyboard finger rapid swift blaze flash rhythm flow smooth sharp".split(" ");
+const DUR = 30;
+
+let words, input, wi, ci, started, finished, timeLeft, cc, tc, cw, charMap, bestWpm, timerId;
+const $ = (s) => document.querySelector(s);
+const trap = $("#input-trap");
+const wordsEl = $("#words");
+const timerEl = $("#timer");
+const hintEl = $("#hint");
+const resultsEl = $("#results");
+
+function genWords(n) {
+  const r = [];
+  for (let i = 0; i < n; i++) r.push(WORDS[(Math.random() * WORDS.length) | 0]);
+  return r;
+}
+
+function render() {
+  wordsEl.innerHTML = "";
+  for (let w = 0; w < words.length; w++) {
+    const span = document.createElement("span");
+    span.className = "word" + (w === wi ? " active" : "");
+    span.dataset.w = w;
+    for (let c = 0; c < words[w].length; c++) {
+      const ch = document.createElement("span");
+      ch.className = "char";
+      const st = charMap[`${w}-${c}`];
+      if (w < wi) {
+        ch.className += st === "correct" ? " done-correct" : st === "wrong" ? " done-wrong" : " missed";
+      } else if (w === wi) {
+        if (st === "correct") ch.className += " correct";
+        else if (st === "wrong") ch.className += " wrong";
+      }
+      if (w === wi && c === ci) {
+        const cur = document.createElement("span");
+        cur.className = "cursor";
+        ch.appendChild(cur);
+      }
+      ch.appendChild(document.createTextNode(words[w][c]));
+      span.appendChild(ch);
+    }
+    wordsEl.appendChild(span);
+  }
+}
+
+function scrollToActive() {
+  const el = wordsEl.querySelector(".word.active");
+  if (!el) return;
+  const top = el.offsetTop - wordsEl.offsetTop;
+  const lh = el.offsetHeight + 8;
+  const target = Math.max(0, top - lh);
+  if (target > wordsEl.scrollTop) wordsEl.scrollTop = target;
+}
+
+function updateTimer() {
+  const color = timeLeft <= 5 ? "#E24B4A" : timeLeft <= 10 ? "#F2A623" : "#F9CB42";
+  timerEl.style.color = color;
+  timerEl.textContent = timeLeft;
+}
+
+function finish() {
+  finished = true;
+  clearInterval(timerId);
+  const wpm = Math.round((cc / 5) / (DUR / 60));
+  const acc = tc > 0 ? Math.round((cc / tc) * 100) : 100;
+  if (bestWpm === null || wpm > bestWpm) bestWpm = wpm;
+
+  timerEl.style.display = "none";
+  resultsEl.style.display = "block";
+  $("#r-wpm").textContent = wpm;
+  $("#r-acc").textContent = acc + "%";
+  $("#r-words").textContent = cw;
+  $("#best").textContent = bestWpm !== null ? "personal best: " + bestWpm + " wpm" : "";
+  render();
+}
+
+function reset() {
+  clearInterval(timerId);
+  words = genWords(60);
+  input = ""; wi = 0; ci = 0;
+  started = false; finished = false; timeLeft = DUR;
+  cc = 0; tc = 0; cw = 0; charMap = {};
+  timerEl.style.display = "none";
+  hintEl.style.display = "block";
+  resultsEl.style.display = "none";
+  wordsEl.scrollTop = 0;
+  render();
+  trap.focus();
+}
+
+function startGame() {
+  started = true;
+  hintEl.style.display = "none";
+  timerEl.style.display = "block";
+  updateTimer();
+  timerId = setInterval(() => {
+    timeLeft--;
+    updateTimer();
+    if (timeLeft <= 0) finish();
+  }, 1000);
+}
+
+trap.addEventListener("keydown", (e) => {
+  if (e.key === "Tab") { e.preventDefault(); reset(); return; }
+  if (finished) return;
+
+  if (!started && e.key.length === 1) startGame();
+
+  if (e.key === " ") {
+    e.preventDefault();
+    if (!input.length) return;
+    const w = words[wi];
+    if (input === w) cw++;
+    for (let i = 0; i < w.length; i++) {
+      const k = `${wi}-${i}`;
+      if (!charMap[k]) charMap[k] = i < input.length ? (input[i] === w[i] ? "correct" : "wrong") : "missed";
+    }
+    cc++; tc++;
+    wi++; ci = 0; input = "";
+    render();
+    scrollToActive();
+  } else if (e.key === "Backspace") {
+    e.preventDefault();
+    if (input.length > 0) {
+      delete charMap[`${wi}-${input.length - 1}`];
+      input = input.slice(0, -1);
+      ci = input.length;
+      render();
+    } else if (wi > 0) {
+      const prevWi = wi - 1;
+      const prevWord = words[prevWi];
+      let typedLen = 0;
+      for (let i = 0; i < prevWord.length; i++) {
+        if (charMap[`${prevWi}-${i}`]) typedLen = i + 1;
+        else break;
+      }
+      let rebuilt = "";
+      for (let i = 0; i < typedLen; i++) {
+        rebuilt += charMap[`${prevWi}-${i}`] === "correct" ? prevWord[i] : "~";
+      }
+      wi = prevWi;
+      input = rebuilt;
+      ci = typedLen;
+      render();
+    }
+  } else if (e.key.length === 1) {
+    e.preventDefault();
+    const w = words[wi];
+    const p = input.length;
+    if (p < w.length + 4) {
+      const ok = p < w.length && e.key === w[p];
+      charMap[`${wi}-${p}`] = ok ? "correct" : "wrong";
+      tc++; if (ok) cc++;
+      input += e.key; ci = input.length;
+      render();
+    }
+  }
+});
+
+document.body.addEventListener("click", () => trap.focus());
+$("#restart-btn").addEventListener("click", reset);
+
+bestWpm = null;
+reset();
+</script>
+</body>
+</html>
